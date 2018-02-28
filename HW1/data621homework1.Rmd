@@ -1,0 +1,390 @@
+---
+title: "608temp"
+author: "jim lung"
+date: "02-16-2018>—¥"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r include=FALSE, cache=FALSE}
+library(knitr)
+## set global chunk options
+opts_chunk$set(fig.path='figure/manual-', cache.path='cache/manual-', fig.align='center', fig.show='hold', par=TRUE)
+
+## tune details of base graphics
+knit_hooks$set(par=function(before, options, envir){
+if (before && options$fig.show!='none') par(mar=c(4,4,.2,.1),cex.lab=.95,cex.axis=.9,mgp=c(2,.7,0),tcl=-.3)
+})
+library(stringr)
+library(zoo)
+library(faraway)
+library(ggplot2)
+library(ggthemes)
+library(rlang)
+library(gridExtra)
+
+```
+
+
+---------  
+---------  
+
+### Introduction
+
+We will explore, analyze and model a data set representing a professional baseball team from the years 1871
+to 2006 inclusive. Each record has the performance of the team for the given year, with all of the
+statistics adjusted to match the performance of a 162 game season.  We will build three multiple linear regression models on the training data to predict the number of wins for the team.
+
+
+--------
+
+### Data Exploration
+
+The training data set consists of 2276 records.  Each record represents the performance of a team during a one year baseball season.  The response variable, which is what we want to train our models to predict, is "TARGET_WINS."  
+
+The predictor variables listed below represent the number of batting, running and fielding events that occurred during games.  The events were captured because they are posited to have either a positive (denoted by +) or negative (-) impact on winning the game. 
+
+| Variable Name    | Impact | Definition
+|:----------------:|:------:|:------------------------------
+| TEAM_BATTING_H   |   +    | Base Hits by batters (1B,2B,3B,HR) 
+| TEAM_BATTING_2B  |   +    | Doubles by batters (2B) 
+| TEAM_BATTING_3B  |   +    | Triples by batters (3B) 
+| TEAM_BATTING_HR  |   +    | Homeruns by batters (4B) 
+| TEAM_BATTING_BB  |   +    | Walks by batters 
+| TEAM_BATTING_HBP |   +    | Batters hit by pitch 
+| TEAM_BATTING_SO  |   -    | Strikeouts by batters 
+| TEAM_BASERUN_SB  |   +    | Stolen bases
+| TEAM_BASERUN_CS  |   -    | Caught stealing 
+| TEAM_FIELDING_E  |   -    | Errors 
+| TEAM_FIELDING_DP |   +    | Double Plays 
+| TEAM_PITCHING_BB |   -    | Walks allowed 
+| TEAM_PITCHING_H  |   -    | Hits allowed 
+| TEAM_PITCHING_HR |   -    | Homeruns allowed 
+| TEAM_PITCHING_SO |   +    | Strikeouts by pitchers 
+
+```{r, echo=FALSE}
+
+# get the file
+
+file_loc <- "moneyball-training-data.csv"
+df <- read.csv(file_loc,header = TRUE, sep = ",", stringsAsFactors = FALSE)
+
+f <- colnames(df)  # establish the data categories to be studied 
+
+lm_all <- lm(TARGET_WINS ~ TEAM_BATTING_H + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR + TEAM_BATTING_BB + TEAM_BATTING_SO
+                         + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+                         + TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO
+                         + TEAM_FIELDING_E + TEAM_FIELDING_DP, data = df)
+
+df2 <- na.aggregate(df) # replace NA values with mean of the column
+lm_all2 <- lm(TARGET_WINS ~ TEAM_BATTING_H + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR + TEAM_BATTING_BB + TEAM_BATTING_SO
+                         + TEAM_BASERUN_SB + TEAM_BASERUN_CS +
+                         + TEAM_PITCHING_H + TEAM_PITCHING_HR + TEAM_PITCHING_BB + TEAM_PITCHING_SO
+                         + TEAM_FIELDING_E + TEAM_FIELDING_DP, data = df2)
+
+```
+
+--------
+
+### Data Preparation
+
+
+Most of the rows of data are missing at least one value, and one variable, TEAM_BATTING_HBP, is so sparsely populated (191 of 2276 records) that we will exclude it from consideration altogether.  For the other variables, we first try filling in the average value of the data field in the missing records.  This diminishes the signal in the data, as the overall r-squared value (the variation explained by the model) drops from `r round(summary(lm_all)$r.squared,digits=2)` to `r round(summary(lm_all2)$r.squared,digits = 2)`.  We could use a regression model to fill in the blanks but since we would then be using that filled in data for further regression analysis, in my view, it would not add predictive value.  Since we do have a very large number of complete records, excluding TEAM_BATTING_HBP, it may better to simply ignore incomplete records when evaluating the significance and value of each variable, rather than filling in with 'dummy' data. 
+
+Number of errors and hits allowed, for example, had some outliers, but a histogram of the data shows that it follows a non-normal, very right skewed distribution:
+
+```{r, echo=FALSE}
+
+g1 <- ggplot(df, aes(x=TEAM_FIELDING_E)) + geom_histogram(bins = 300) +
+  theme_tufte()
+
+g2 <- ggplot(df, aes(x=TEAM_PITCHING_H)) + geom_histogram(bins=300) + 
+  theme_tufte()
+
+g3 <- ggplot(df, aes(x=log(TEAM_FIELDING_E))) + geom_histogram(bins = 300) + 
+  theme_tufte()
+
+g4 <- ggplot(df, aes(x=log(TEAM_PITCHING_H))) + geom_histogram(bins=300) + 
+  theme_tufte()
+
+
+grid.arrange(g1, g2, g3, g4, ncol=2)
+
+```
+
+These two variables look more normal when a log transformation is applied to them. Hits allowed, after a log transformation is performed, seems to still have outliers.
+
+Below are scatterplots of each of the predictive attributes.  We will look at these for outliers or other structure indicating non-normality.  
+
+
+```{r, echo=FALSE}
+
+par(mfrow=c(2,3))
+plot(TARGET_WINS ~ TEAM_BATTING_H,df)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_H,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_2B,df)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_2B,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_3B,df)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_3B,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_HR,df)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_HR,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_BB,df)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_BB,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_SO,df)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_SO,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_BASERUN_SB,df)
+  abline(lm(TARGET_WINS ~ TEAM_BASERUN_SB,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_BASERUN_CS,df)
+  abline(lm(TARGET_WINS ~ TEAM_BASERUN_CS,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_PITCHING_H,df)
+  abline(lm(TARGET_WINS ~ TEAM_PITCHING_H,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_PITCHING_HR,df)
+  abline(lm(TARGET_WINS ~ TEAM_PITCHING_HR,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_PITCHING_BB,df)
+  abline(lm(TARGET_WINS ~ TEAM_PITCHING_BB,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_PITCHING_SO,df)
+  abline(lm(TARGET_WINS ~ TEAM_PITCHING_SO,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_FIELDING_E,df)
+  abline(lm(TARGET_WINS ~ TEAM_FIELDING_E,data = df),col="blue")
+plot(TARGET_WINS ~ TEAM_FIELDING_DP,df)
+  abline(lm(TARGET_WINS ~ TEAM_FIELDING_DP,data = df),col="blue")
+  
+```
+
+ 
+There are a small number of extreme outliers in TEAM_PITCHING_H, TEAM_PITCHING_BB and TEAM_PITCHING_SO that have an outsize effect on the model, we will remove those as they are most likely observational errors.
+
+Also, since TEAM_BATTING_H is a combination of TEAM_BATTING_2B, TEAM_BATTING_3B, TEAM_BATTING_HR (and also includes batted singles), we will create a new variable TEAM_BATTING_1B equaling TEAM_BATTING_H - TEAM_BATTING_2B - TEAM_BATTING_3B - TEAM_BATTING_HR, just to see if there is any significance in hitting singles versus any successful hit.  
+  
+...  
+
+```{r, echo=FALSE}
+
+# get the file
+
+file_loc <- "moneyball-training-data.csv"
+
+
+df3 <- read.csv(file_loc,header = TRUE, sep = ",", stringsAsFactors = FALSE)
+f3 <- colnames(df3)
+par(mfrow=c(2,3))
+plot(TARGET_WINS ~ TEAM_BATTING_H,df3)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_H,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_2B,df3)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_2B,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_3B,df3)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_3B,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_HR,df3)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_HR,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_BB,df3)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_BB,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_BATTING_SO,df3)
+  abline(lm(TARGET_WINS ~ TEAM_BATTING_SO,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_BASERUN_SB,df3)
+  abline(lm(TARGET_WINS ~ TEAM_BASERUN_SB,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_BASERUN_CS,df3)
+  abline(lm(TARGET_WINS ~ TEAM_BASERUN_CS,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_PITCHING_H,df3)
+  abline(lm(TARGET_WINS ~ TEAM_PITCHING_H,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_PITCHING_HR,df3)
+  abline(lm(TARGET_WINS ~ TEAM_PITCHING_HR,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_PITCHING_BB,df3)
+  abline(lm(TARGET_WINS ~ TEAM_PITCHING_BB,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_PITCHING_SO,df3)
+  abline(lm(TARGET_WINS ~ TEAM_PITCHING_SO,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_FIELDING_E,df3)
+  abline(lm(TARGET_WINS ~ TEAM_FIELDING_E,data = df3),col="blue")
+plot(TARGET_WINS ~ TEAM_FIELDING_DP,df3)
+  abline(lm(TARGET_WINS ~ TEAM_FIELDING_DP,data = df3),col="blue")
+  
+```
+
+The A-B line for batting singles is similar to the other batting A-B lines, nothing new to see here.  Looking at the cleansed data, the pitching data now seems complementary to the hitting data, (as it should since they are representing the same events from two perspectives), so we will ignore the pitching data.  
+
+Next we will look at the key attributes of the individual linear models for each variable.  We will make a preliminary decision whether or not to include the remaining variables based on the Coefficient (impact on wins), Error (trustworthiness of Coefficient), R-Squared (explanatory value) and P-Value (significance). 
+
+
+
+```{r, echo=FALSE}
+
+#make a linear model for each variable compared to Wins
+v <- length(f3)
+lms       <- vector(mode = "list",v)
+lmsResid  <- vector(mode = "list",v)
+lmsR2     <- c(v)
+lmsCoeff  <- c(v)
+lmsError  <- c(v)
+lmsErPct  <- c(v)
+lmsPValue <- c(v)
+lmsUse    <- c(v)
+
+for (i in 3:v){
+  lms[[i]] <- lm(df3[,2] ~ df3[,i], data = df3)  # linear model of attribute
+  lmsResid[[i]] < resid(lms[[i]]) # get the residuals while we are here
+  lmsR2[[i]] <-  round(summary(lms[[i]])$adj.r.squared,digits = 3) #proportion of variation explained by this variable
+  lmsCoeff[[i]] <- round(summary(lms[[i]])$coefficients[2,1],digits=3) #measures how much this variable affects wins
+  lmsError[[i]] <- round(summary(lms[[i]])$coefficients[2,2], digits = 3) #measures the accuracy of Coeff
+  lmsErPct[[i]] <- round(abs(lmsError[[i]]/lmsCoeff[[i]]),2)*100 # converts to percent
+  lmsPValue[[i]] <- round(summary(lms[[i]])$coefficients[2,4],4)  # measures the significance
+  lmsUse[[i]] <- "No"
+  if (regexpr('PITCHING', f3[i])[1]==-1){   # exclude pitching
+    if (lmsErPct[[i]] < 25){                # exclude high error 
+      if (lmsR2[[i]] > .01){                # exclude extremely low explanatory value
+        if(abs(lmsCoeff[[i]]) > .01){       # exclude very low impact
+          if (lmsPValue[[i]] < .05){
+          lmsUse[[i]] <- "Yes"
+          }
+        }
+      }
+    }
+  }
+}
+
+#place the key metrics of each model in a dataframe and display in a table
+df_temp <- data.frame(f3[3:v],lmsCoeff[3:v], lmsError[3:v], lmsErPct[3:v],  lmsR2[3:v], lmsPValue[3:v], lmsUse[3:v])
+par(mfrow=c(1,1))
+kable(df_temp, col.names = c("Attribute", "Coefficient", "Error", "Error Percent", "R_Squared", "P-Value", "Use"))
+
+```
+
+
+Below are residual plots for the remaining variables.  A lack of structure in a residual plot indicates near constant variance.  
+
+
+
+```{r, echo=FALSE}
+
+par(mfrow=c(3,3))
+dfa <- df3[,1:3]
+for (i in 3:v){
+  if (lmsUse[[i]]=="Yes"){
+    plot(df3[,i], lmsResid[[i]], ylab="Residuals", xlab = f3[[i]])
+    if (i > 3) {dfa <- merge(dfa, df3[,c(1,i)],by = "INDEX")}  #build data frame of selected variables
+  }
+}
+
+```
+
+Finally we should check for collinearity among variables, by measuring the Variance Inflation Factor for each variable.
+
+
+```{r, echo=FALSE, warning=FALSE}
+
+dfco <- dfa[,-1] # remove the index so we can check for collinearity
+lmco <- lm(TARGET_WINS~.,dfco)
+vif(lmco)
+
+```
+
+This analysis suggests that the TEAM_BATTING_H variable is the highly redundant, as is TEAM_FIELDING_E.  Since TEAM_BATTING_H is composed of four other variables, let's remove it first and check for redundancy again.
+
+
+```{r, echo=FALSE}
+
+dfcor <- dfa[,c(-1,-3)] # remove the index and TEAM_BATTING_H so we can check for collinearity
+lmcor <- lm(TARGET_WINS~.,dfcor)
+vif(lmcor)
+
+```
+
+Now all the remaining variables have a low VIF value, and we have satisfied all the requirements for removing unsuitable variables from our multiple linear regression model.  
+
+--------
+
+### Build Models
+
+#### Model 1  
+
+For our first model, we will use TEAM_BATTING_2B, TEAM_BATTING_3B and TEAM_BATTING_HR.  
+
+Batting is good for winning, particularly batting doubles and triples and home runs. This is seen by the strong positive coefficents (Estimate), low standard errors / p-value, and reasonably high R-squared value in the linear model for these variables.
+
+```{r, echo=FALSE}
+
+myModel1 <- lm(TARGET_WINS ~ TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR,dfa)
+summary(myModel1)
+
+```
+
+
+Below is a listing of the first six records of the evaluation data:  
+
+```{r, echo=FALSE}
+
+file_loc <- "moneyball-evaluation-data.csv"
+
+dfEval <- read.csv(file_loc,header = TRUE, sep = ",", stringsAsFactors = FALSE)
+head(dfEval)
+
+```
+
+Using the Predict function, we can predict the number of wins for each evaluation data record.
+
+```{r}
+myModel1_Predictions <- predict.lm(myModel1,dfEval) #predict
+head(myModel1_Predictions)
+  
+```
+  
+#### Model 2  
+
+In this model we use all the Batting variables.  The adjusted R-squared value increases markedly, which should yield much better predictions than the first model.  This model illustrates the value of batting singles and earning walks.   
+
+
+```{r, echo=FALSE}
+
+myModel2 <- lm(TARGET_WINS ~ TEAM_BATTING_H + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR + TEAM_BATTING_BB,dfa)
+summary(myModel2)
+
+```
+
+Here are sample predictions for the second model:  
+
+```{r}
+myModel2_Predictions <- predict.lm(myModel2,dfEval) #predict
+head(myModel2_Predictions)
+
+```
+   
+  
+
+#### Model 3  
+
+In this model we use all the variables we determined above to be useful.  The adjusted R-squared value again increases substantially while the residual standard error drops incrementally.  This model illustrates the incremental value of stolen bases, and the negative impact of fielding errors.   
+
+
+```{r, echo=FALSE}
+
+myModel3 <- lm(TARGET_WINS ~ TEAM_BATTING_H + TEAM_BATTING_2B + TEAM_BATTING_3B + TEAM_BATTING_HR + TEAM_BATTING_BB + TEAM_BASERUN_SB + TEAM_FIELDING_E,dfa)
+summary(myModel3)
+
+```
+
+Here are sample predictions for the third model:  
+
+```{r}
+myModel3_Predictions <- predict(myModel3,dfEval, interval='confidence') #predict
+head(myModel3_Predictions)
+
+
+```
+
+--------
+
+### Select Models
+
+Model 3 is the best multiple linear regression model because it uses all of the relevant available information to provide the strongest estimate.  It has the highest Adjusted R-squared value (0.33) and the lowest p-value (~0).  However, in cases where not all variables are present in Model 3, we should use Model 2.  
+
+
+Predictions from Model 3 are shown directly above.  The residuals plots for Model 3 are shown near the end of the Data Preparation section, where issues of collinearity were resolved (colinear variables were eliminated).
+
+A topic for further study would be to develop a virtual model that seamlessly switches between the two models as needed, without corrupting either model with imputed data.  
+
+### Conclusions
+
+This model would benefit from more conceptual analysis of what these measures mean, and more analysis of how this compares to the observed relationships between the variables.
+
+It's pretty clear that there should be relationships betweeen base hits, singles, doubles, triples, and home runs, but looking at pairwise correlation, only some pairs showed correlation. There's no clear reason why base hits should be correlated to doubles, but not triples or home runs for example.
+
+I'd also like to dig into the definition of errors, and research more about the relationships between measures that appeared in both pitcher and batter. It would appear some of these should be negatively correlated, but I'd be interested to learn more about what sorts of differences might be present in these measures. If they're exactly 1-1, I could try to eliminate one side or the other.
