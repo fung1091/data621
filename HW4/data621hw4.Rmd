@@ -44,9 +44,9 @@ require("knitr")
 require("psych")
 # Let's load the data
 
-training <- read.csv(url('https://raw.githubusercontent.com/rmalarc/DATA621/master/hw04/insurance_training_data.csv'),stringsAsFactors = FALSE)
+training <- read.csv(url('https://raw.githubusercontent.com/fung1091/data621/master/HW4/insurance_training_data.csv'),stringsAsFactors = FALSE)
 
-evaluation <- read.csv(url('https://raw.githubusercontent.com/rmalarc/DATA621/master/hw04/insurance-evaluation-data.csv'),stringsAsFactors = FALSE)
+evaluation <- read.csv(url('https://raw.githubusercontent.com/fung1091/data621/master/HW4/insurance-evaluation-data.csv'),stringsAsFactors = FALSE)
 
 
 columns <- colnames(training)
