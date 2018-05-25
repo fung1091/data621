@@ -128,7 +128,7 @@ write.csv(iowa_data_reduced1, "iowa_data_reduced1.csv")
 # Type of dataset preparation
 types <- sapply(1:length(iowa_data_reduced1), function(x) typeof(iowa_data_reduced1[,x]))
 type.df <- data.frame(VAR=names(iowa_data_reduced1), TYPE=types)
-kable(type.df)
+knitr::kable(type.df)
 ```
 
 
@@ -448,10 +448,20 @@ any_but_zeroinflated <- data.frame(Models, AIC, BIC, Deviance, df.residual)
 knitr::kable(any_but_zeroinflated)
 
 ```
-
+### Predication
+Try To generate 30 data for next period for the Bottle sold, and predicted values obtained by evaluating the regression function in the frame newdata by using model3 of log transformation with forward linear regression.
 ```{r}
-#iowa_data_reduced2$`Bottles Sold` <- raster::predict(model3, newdata = iowa_data_reduced2, type = "response")
-#head(iowa_data_reduced2, 20)
+iowa_data_reduced2$`Bottles Sold` <- raster::predict(model3, newdata = iowa_data_reduced2, type = "response")
+head(iowa_data_reduced2, 30)
+
+predict(model3, newdata = iowa_data_reduced2, se.fit = TRUE)
+
+#pred.w.plim <- predict(lm(y ~ x), new, interval="prediction")
+pred.w.plim <- predict(model3, newdata = iowa_data_reduced2, interval="prediction")
+pred.w.clim <- predict(model3, newdata = iowa_data_reduced2, interval="confidence")
+
+matplot(iowa_data_reduced2$`Bottles Sold`,cbind(pred.w.clim, pred.w.plim[,-1]),
+        lty=c(1,2,2,3,3), type="l", ylab="predicted factor")
 ```
 
 # Discussion and Conclusions
@@ -499,7 +509,7 @@ toLatex(sessionInfo())
 
 ## R programming code
 
-See [Final Project.rmd](https://github.com/) on GitHub for source code.   
+See [Final Project.rmd](https://github.com/fung1091/data621/blob/master/finalproject/data621final.Rmd) on GitHub for source code.   
 
-
+https://github.com/fung1091/data621/blob/master/finalproject/data621final.Rmd
 
