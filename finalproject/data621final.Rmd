@@ -1,0 +1,505 @@
+---
+title: "data621final"
+author: "jim lung"
+date: "May 21, 2018"
+output:
+  word_document: default
+  pdf_document: default
+  tidy: yes
+  html_document:
+    highlight: pygments
+    theme: cerulean
+code_folding: hide
+---
+
+# Abstract: 
+The goal of this project is to determine a geographic location (county) in Iowa that will yield the highest amount of liquor sales. Once we have the location specified according to highest amount of liquor sales, we can look and see if there is anything specifically that helps total volume sold. ((coupled with number of current liquor stores per area, can offer recommendations on where to open a new liquor store)). High sales and low numbers of existing stores will most likely lead to higher profits for the new liquor store, on average. The criteria for success would be determining the inventory forecast by Bottles sold predication in which the company could plan and determine which factors effect total sales and how.
+Using the correlation and forward stepwise regression with linear method are applied to perform predication the bottles sold. The dataset used consisted of data regarding sales of liquor from different stores in different counties within the state of Iowa. In order to obtain the specific trend and predication, the dataset was subset into the highest volume sold location at DES MOINES City in 2017. 
+Before outputting the models, the influential points were all removed. For each target variable, two models were rendered. All the three models, the variables that showed significance were Whiskies and distillery Whiskies. Although the country and city highest volume sold are also separately Polk country and Des Moines, the volume sold in Gallons are definitely decreased comparing between 2016 and 2017. 
+
+# Key words: 
+Liquor Sales, Naive Forecast, Linear Regression, Inventory Forecast
+ 
+# Introduction: 
+The objective of this report is to create a statistical model for the number of bottles sold of whiskey which is within the state of Iowa. This can help us make informed decisions on inventory prediction, sales, and assist wholesale distributors to plan for the predicted volume of distribution.
+To perform exploratory analysis with visualizations and statistical analysis, this is a large dataset and that is a great thing. When loading the full dataset, there will be upwards of 2.7 million observations. We removed the 2,973 duplicated columns from the dataframe, as well as the all of the null values. Because of our large number of observations, this should have very little effect on our analysis. For our location data, we can see that there are 100 county numbers, 99 counties, 383 cities, and 676 zip codes. It would be wise to cross-reference this data with the state's municipality records to make sure the location variables are properly matched across city, county, and zip code. We see that a large number of observations are found in Polk County, the city of Des Moines, and the zip code 50010 (Ames, Iowa). Ames is the home of Iowa State. This makes logical sense because these are the main urban centers in the state of Iowa and a larger number of people should correlate positively with a higher number of liquor sales. We have 72 different categories of alcohol. These are highly differentiated. If we were to analyze the categories further, it may be wise to group in broader categories. For example, all whiskeys and bourbons could be in one category, all vodkas in another, etc. There are 1400 unique stores in the data set. The vast majority of sales are of quantities of less than 100 bottles and of transactions less than $1,000. 
+This establishes that spirit sales in the Unites States is a valuable market worth exploring for a more detailed and statistical understanding of sales and volume. We hope to more thoroughly understand what impact specific store sights may have accounting for the seasonal impact in effect liquor sales. We set up the range of our analysis to the City of Des Moines in 2017. The part of the year has an decreasing tread in sales in total capacity of alcohol, so the time of interest for this analysis will be in 2017.
+
+## background
+The main goal that has to be achieved in inventory prediction is increasing the efficiency without decreasing the service value offered to the customers. When managing the levels of inventory, it is important to maintain moderate level(s) - not too high and not too low. If the inventory level is excessive, business funds can get wasted. These funds would not be able to be used for any other purpose, thus involving an opportunity cost. The costs of shortage, handling insurance, recording and inspection would proportionately increase along with inventory volume, thus impairing profitability.
+
+# Literature review: 
+Book: An Overview of Forecasting Methodology
+Author: David S. Walonick (1993)
+Trend extrapolation - These methods examine trends and cycles in historical data, and then use mathematical techniques to extrapolate to the future. The assumption of all these techniques is that the forces responsible for creating the past, will continue to operate in the future. This is often a valid assumption when forecasting short term horizons, but it falls short when creating medium and long term forecasts. The further out we attempt to forecast, the less certain we become of the forecast.
+The most common mathematical models involve various forms of weighted smoothing methods. Another type of model is known as decomposition. This technique mathematically separates the historical data into trend, seasonal and random components. A process known as a "turning point analysis" is used to produce forecasts. ARIMA models such as adaptive filtering and Box-Jenkins analysis constitute a third class of mathematical model, while simple linear regression and curve fitting is a fourth.
+Makridakis (one of the gurus of quantitative forecasting) correctly points out that judgmental forecasting is superior to mathematical models, however, there are many forecasting applications where computer generated forecasts are more feasible. For example, large manufacturing companies often forecast inventory levels for thousands of items each month. It would simply not be feasible to use judgmental forecasting in this kind of application.
+Consider Timing - When planning to effectively forecast your inventory levels it is important to consider both the life cycle of your products as well as how far in the future your forecast must reach. When it comes to the life cycle of your products, understanding how much stock to keep of certain items to avoid waste is very important. For example, assuming that your most expensive items are also your mist profitable may not always be the case and could actually prevent cost flow when lower costing items have a higher turnover rate. Understanding how to balance inventory levels when forecasting can be beneficial to your budget. Knowing just how your products and sales effects your business is key for any businesses success.
+
+# Experimentation and Results
+## Data Exploration
+
+The data set contains the spirits purchase information of Iowa Class "E" liquor licensees by product and date of purchase from January 1, 2012 to current. The data set is provided by the Iowa Department of Commerce, Alcoholic Beverages Division, click here to view the data set at Data.Iowa.Gov.
+As previously discussed, the data set is 3.3 GB in total size and much to large to use in a meaningful model.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(randomForest)
+library(data.table)
+library(car)
+```
+
+### Achieve the dataset from https://data.iowa.gov/Economy/Iowa-Liquor-Sales/m3tr-qhgy
+```{r}
+iowa_data <- fread("Iowa_Liquor_Sales.csv", header = T, sep = ',')
+```
+
+```{r}
+knitr::kable(summary(iowa_data[1:6]))
+knitr::kable(summary(iowa_data[7:12]))
+knitr::kable(summary(iowa_data[13]))
+```
+
+### Data Preparation
+
+### Ensuring Correct Calculations:
+Ensuring bottle size (e.g., 750 ml) x bottles sold = volume liters sold
+Ensuring bottle retail value x bottles sold = sale dollars
+I found no problems with the math, but it was good to check all the same
+
+```{r}
+# data cleaning and imutation
+removeDollars <- function(column){
+  as.numeric(gsub("\\,","",gsub("\\$","", column)))
+}
+
+iowa_data_reduced1 <- iowa_data %>%
+                     dplyr::select(Date, City, `Category Name`, `County`,`Bottle Volume (ml)`,
+                            `State Bottle Cost`, `State Bottle Retail`, `Sale (Dollars)`,
+                             `Volume Sold (Gallons)`, `Bottles Sold`) %>%
+                    mutate(Date = as.Date(Date, format = "%m/%d/%Y"),
+                           City = factor(toupper(City)),
+                           `CategoryName` = factor(toupper(`Category Name`)),
+                           `County` = factor(toupper(`County`)),
+                           `Bottle Volume (ml)` = as.numeric(`Bottle Volume (ml)`), 
+                           `State Bottle Cost` = removeDollars(`State Bottle Cost`), 
+                           `State Bottle Retail` = removeDollars(`State Bottle Retail`), 
+                           `Sale (Dollars)` = removeDollars(`Sale (Dollars)`),
+                           `Volume Sold (Gallons)` = as.numeric(`Volume Sold (Gallons)`), 
+                           `Bottles Sold` = as.numeric(`Bottles Sold`)) %>%
+                    mutate(Month = as.numeric(format(Date, "%m")),
+                           Year = as.numeric(format(Date, "%Y"))) %>%
+                    #dplyr::filter(Month == "3") %>%
+                    #dplyr::filter(Year == "2018") %>% 
+                    #dplyr::filter(City == "DES MOINES") %>% 
+                    dplyr::filter(grepl("WHISKIES", `CategoryName`)) %>%
+                    dplyr::select(-Date) %>%
+                    group_by(Month, Year, City, `CategoryName`, County)  %>%
+                    summarize( `Bottles Sold` = sum(`Bottles Sold`), 
+                               `Sale (Dollars)` = sum(`Sale (Dollars)`), 
+                               `Bottle Volume (ml)` = mean(`Bottle Volume (ml)`),
+                               `State Bottle Cost` = sum(`State Bottle Cost`),
+                               `State Bottle Retail` = sum(`State Bottle Retail`),
+                               `Sale (Dollars)` = sum(`Sale (Dollars)`),
+                               `Volume Sold (Gallons)` = sum(`Volume Sold (Gallons)`)) %>%
+                    as_tibble()
+
+```
+
+```{r}
+
+#summary(iowa_data_reduced1)
+
+#iowa_data_reduced1$`Category Name`= as.character(iowa_data_reduced1$`Category Name`)
+iowa_data_reduced1$City = as.character(iowa_data_reduced1$City)
+iowa_data_reduced1$County = as.character(iowa_data_reduced1$County)
+knitr::kable(head(iowa_data_reduced1))
+write.csv(iowa_data_reduced1, "iowa_data_reduced1.csv")
+```
+
+### Type of dataset preparation
+```{r}
+# Type of dataset preparation
+types <- sapply(1:length(iowa_data_reduced1), function(x) typeof(iowa_data_reduced1[,x]))
+type.df <- data.frame(VAR=names(iowa_data_reduced1), TYPE=types)
+kable(type.df)
+```
+
+
+
+```{r}
+library(magrittr)
+library(dplyr)
+
+# comparing between volume sold and category name
+iowaDataReducedTop <- iowa_data_reduced1 %>%
+                      dplyr::group_by(Year, `CategoryName`) %>%
+                      dplyr::select(Year, `CategoryName`, `Volume Sold (Gallons)` ) %>%
+                      dplyr::summarize(`Volume Sold (Gallons)` = round(sum(`Volume Sold (Gallons)`))) %>%
+                      dplyr::top_n(n = 10, wt = `Volume Sold (Gallons)`)
+
+# comparing between volume sold and category name at 2017
+top10in2017 <- iowaDataReducedTop %>%
+               dplyr::filter(Year == 2017)
+
+# comparing between volume sold and county at 2017
+top10counties <- iowa_data_reduced1 %>%
+                 dplyr::group_by(Year, County) %>%
+                 dplyr::select(Year, County, `Volume Sold (Gallons)` ) %>%
+                 dplyr::summarize(`Volume Sold (Gallons)` = round(sum(`Volume Sold (Gallons)`))) %>%
+                 top_n(n = 10, wt = `Volume Sold (Gallons)`)
+                 #dplyr::filter(Year == 2017)
+
+# comparing between volume sold and county at 2017
+top10categoryforsale <- iowa_data_reduced1 %>%
+                        dplyr::group_by(Year, `CategoryName`) %>%
+                        dplyr::select(Year, `CategoryName`, `Sale (Dollars)` ) %>%
+                        dplyr::summarize(`Sale (Dollars)` = round(sum(`Sale (Dollars)`))) %>%
+                        top_n(n = 10, wt = `Sale (Dollars)`)
+                        #dplyr::filter(Year == 2017)
+```
+
+```{r}
+head(iowaDataReducedTop)
+head(top10in2017)
+head(top10counties)
+head(top10categoryforsale)
+```
+
+
+
+### Below is a plot of the distribution of counts for the Volume Sold (Gallons) variable.
+We reviewed the liquor sales by gallons sold per year by Liquor Category. Initially, we viewed the top 5 Liquor Categories by volume sold but there were large disparities between years, suggesting that the top 5 change often and is likely due to changing consumer tastes. We do see a more stable set of liquor categories for the top 10 category which suggests that while tastes may change we don’t see large movements in liquor categories at this level.
+
+We can further see that the canadian whiskies are the highest volume sold from 2012 to 2016, but the number of straight bourbon whiskies is the highest in 2017.
+```{r}
+# Volume of Liquor Category Sales by Gallons Sold
+ggplot(iowaDataReducedTop, aes(x = Year, y = `Volume Sold (Gallons)`, fill = `CategoryName`)) +
+    geom_bar(stat="identity", position=position_dodge()) +
+    theme_minimal() + 
+    theme(axis.text.x = element_text(angle = 70, hjust = 1)) +
+    ggtitle("Volume of Liquor Category Sales by Gallons Sold")
+
+```
+
+The highest sold for volume of Liquor is located at Polk County.
+```{r}
+# Volume of Liquor County Sales by Gallons Sold
+ggplot(top10counties, aes(x = Year, y = `Volume Sold (Gallons)`, fill = County)) +
+    geom_bar(stat="identity", position=position_dodge()) +
+    theme_minimal() + 
+    theme(axis.text.x = element_text(angle = 70, hjust = 1)) +
+    ggtitle("Volume of Liquor County Sales by Gallons Sold")
+
+```
+
+The dollar sold of liquor category is same proportation with volume sold of liquor gallon, the canadian whiskies are the highest volume sold from 2012 to 2016, but the number of straight bourbon whiskies is the highest in 2017. 
+```{r}
+# Dollar sold of Liquor Category
+ggplot(top10categoryforsale, aes(x = Year, y = `Sale (Dollars)`, fill = `CategoryName`)) +
+    geom_bar(stat="identity", position=position_dodge()) +
+    theme_minimal() + 
+    theme(axis.text.x = element_text(angle = 70, hjust = 1)) +
+    ggtitle("Dollar sold of Liquor Category")
+
+
+```
+
+```{r}
+iowaCounties <- iowa_data_reduced1 %>% 
+                ungroup() %>%
+                mutate(County = factor(County),
+                       City = factor(City)) %>% 
+                dplyr::filter(!(County == '')) %>%
+                select(Year, County, City, `Volume Sold (Gallons)`) %>%
+                group_by(Year, County, City) %>%
+                summarize(`Volume Sold (Gallons)` = round(sum(`Volume Sold (Gallons)`)))
+head(iowaCounties)
+```
+
+We can see that Des Moines accounts for a significant portion of the liquor sales in Polk County. We will focus our analysis on Polk County.
+```{r}
+# Gallons Sold for whiskey categories for each City in Polk County
+iowaCountiesPolk <- iowaCounties %>% filter(County == "POLK")
+
+ggplot(iowaCountiesPolk, aes(x = County, y = `Volume Sold (Gallons)`, fill = City)) + 
+      scale_y_continuous(labels = scales::comma) + 
+      geom_bar(stat = "identity") +
+      facet_grid(~Year) + 
+      guides(fill = guide_legend(keywidth = 2, keyheight = .75)) + 
+      xlab("County") + 
+      ylab("Volume Sold by Gallons\n") +
+      ggtitle("Gallons Sold for whiskey categories for each City in Polk County")
+```
+
+### Build Models
+
+#### Bottles Sold Model
+We used forward selection method for our initial model for the Bottles Sold. However, we expect some high degrees of multicollinearity as some of our variables can be easily explained by other variables in the data set. We see a very high degree of multicollinearity in our independent variables for Bottles Sold and with good reason. If more bottles sold then certainly the volume sold by gallons would increase as would the sale dollars, we therefore removed volume sold by gallons. Below is the table that highlights the high levels of multicollinearity for Volume Sold by Gallons and Sale Dollars.
+
+```{r}
+# Build model by selection the highest volume location at DES MOINES City
+iowa_data_reduced2 <- iowa_data_reduced1 %>%
+                        
+                        dplyr::select(`CategoryName`, `Bottles Sold`, `Sale (Dollars)`, `Bottle Volume (ml)`, `State Bottle Cost`, `State Bottle Retail`, `Volume Sold (Gallons)` ) %>%
+                        #dplyr::filter(Month == "12") %>%
+                        dplyr::filter(Year == "2017") %>%
+                        dplyr::filter(City == "DES MOINES") %>% 
+                        #dplyr::filter(grepl("WHISKIES", `CategoryName`)) %>%
+                        
+                        as_tibble()
+
+knitr::kable(head(iowa_data_reduced2[1:6]))
+knitr::kable(head(iowa_data_reduced2[7:10]))
+```
+
+# Correlation (Model 1)
+** Check multicollinearity **
+** See correlation between all variables and keep only one of all highly correlated pairs **
+```{r}
+library(car)
+library(dplyr)
+model1 <- lm(`Bottles Sold` ~ CategoryName + `Sale (Dollars)`+ `Bottle Volume (ml)`+ `State Bottle Cost`+ `State Bottle Retail`+ `Volume Sold (Gallons)`, data=iowa_data_reduced2) 
+vif(model1)
+
+library(corrplot)
+corrplot(cor(iowa_data_reduced2[, c(6:10)]))
+
+# VIF for an X variable should be less than 4 in order to be accepted as not causing multi-collinearity. The cutoff is kept as low as 2
+model1 <- lm(`Bottles Sold` ~ CategoryName + `Sale (Dollars)`+ `State Bottle Cost`+ `State Bottle Retail`, data=iowa_data_reduced2)
+
+
+summary(model1)
+```
+
+```{r}
+par(mfrow=c(2,2))
+
+plot(model1)
+
+dfVifFit <- setDT(as.data.frame(car::vif(model1)), keep.rownames = TRUE)[]
+dfVifFit$Adjusted_GVIF <- (dfVifFit$`GVIF^(1/(2*Df))`^2)
+knitr::kable(dfVifFit, align = c("l", "c", "c", "c", "c"))
+```
+
+### Forward regression (model 2)
+It is using forward selection method for the initial model for the Bottles Sold. However, we expect some high degrees of multicollinearity as some of our variables can be easily explained by other variables in the data set. We see a very high degree of multicollinearity in our independent variables for Bottles Sold and with good reason. 
+```{r}
+
+#Forward step 
+forward <- step(lm(`Bottles Sold`~1,data=iowa_data_reduced2),direction = "forward",
+               scope=~CategoryName +`Sale (Dollars)`+ `Bottle Volume (ml)`
+               +`State Bottle Cost`+`State Bottle Retail`+`Volume Sold (Gallons)`,trace = FALSE)
+
+model2 <- lm(formula = `Bottles Sold`~ `Volume Sold (Gallons)` + CategoryName + `State Bottle Retail` + 
+              `Sale (Dollars)`, data = iowa_data_reduced2)
+
+par(mfrow=c(2,2))
+
+plot(model2)
+
+```
+
+```{r}
+dfVifFit <- setDT(as.data.frame(car::vif(model2)), keep.rownames = TRUE)[]
+dfVifFit$Adjusted_GVIF <- (dfVifFit$`GVIF^(1/(2*Df))`^2)
+knitr::kable(dfVifFit, align = c("l", "c", "c", "c", "c"))
+```
+
+If more bottles sold then certainly the volume sold by gallons and sale dollars would increase, we therefore removed Volume Sold by Gallons and Sale Dollars. Below is the table that highlights the high levels of multicollinearity for Volume Sold by Gallons and Sale Dollars.
+
+```{r}
+library(pander)
+library(stargazer)
+
+model2 <- lm(formula = `Bottles Sold`~ `Volume Sold (Gallons)` + CategoryName + `State Bottle Retail`  
+             , data = iowa_data_reduced2)
+
+#Removal of influence points based on two methods
+par(mfrow=c(1,2))
+
+#1. influence points
+x <- influencePlot(model2)
+pandoc.table(x, caption = "Influential points in Bottles Sold Model for influencePlot function")
+#2. Cooks distance plot
+
+
+
+plot(model2,4)
+stargazer(model2, header = FALSE, no.space = TRUE, style = "all2", font.size = "normalsize", single.row = TRUE, intercept.bottom = FALSE, title = "Forward Selection Linear Model for Bottles Sold with Influencial Points")
+```
+
+### Model 2 remove influencePlot
+Several values may have undue influence on the final form of our model. Using the influencePlot function from the car package and Cooks Distance plot, we can see which values that have the greatest impact on our model and we removed the observations indicated in the Cook's distance plot for 58, 87, 105 and 227. 
+
+Below are the diagnostic plots for our Model 1, without influential points. Unfortunately, we see a non-normal distribution in residuals of the qq plot and we see a linear relationship for the fitted and actual values plot.
+
+```{r}
+#Remove the influential points and update the model
+
+model2 <- update(model2, data=iowa_data_reduced2[c(-58,-87, -105, -110),])
+#predict(model4,dfLiquorFit1,type = "response")
+s.model2 <- summary(model2)
+rmse <- sqrt(sum(model2$residuals^2)/s.model2$df[2])
+#rmse = 31
+
+summary(model2)
+par(mfrow = c(2,3))
+x <- plot(model2)
+plot(model2$model$`Bottles Sold`, model2$fitted.values, xlab = "Actual Values", ylab = "Fitted Values")
+```
+
+```{r}
+stargazer(model2, header = FALSE, no.space = TRUE, style = "all2", font.size = "normalsize", single.row = TRUE, intercept.bottom = FALSE, title = "Forward Selection Linear Model for Bottles Sold without Influencial Points")
+```
+
+Our model has an extremely good Adjusted $R^2$ at 0.99 but we see that the distribution of the residuals is not normally distributed and the fitted values plotted to the actual values do show a clearly linear relationship. We will need to further transform the variables in order to have a more normal distribution of our residuals. 
+
+## Bottles Sold Model with Log Transformation (Model 3)
+
+The adjusted model uses the same selection method of forward and keeps Bottles Sold as our dependent variable. And we use the BoxCox transformation method to transform our dependent variable. 
+The resulting $\lambda$ is 0 for transformation as log. By using this selection method and dependent variable transformation, the final model excludes the Sales Dollars variable. Additionally, we have high multicollinearity between the Bottle Cost and the Retail variables, because Bottle Cost has a high impact on Retail price. We remove the Bottle Cost variable as impacts Retail Price may have on our dependent variable.
+
+
+```{r}
+# forward regression with log transformation
+model3 <- step(lm(log(`Bottles Sold`)~1,data=iowa_data_reduced2),direction = "forward",
+                 scope=~CategoryName +`Sale (Dollars)`+ `Bottle Volume (ml)`
+               +`State Bottle Cost`+`State Bottle Retail`+`Volume Sold (Gallons)`,trace = FALSE)
+
+
+model3 <- lm(formula = log(`Bottles Sold`) ~ `State Bottle Cost` + CategoryName + 
+             `State Bottle Retail` + `Volume Sold (Gallons)` + `Bottle Volume (ml)`, 
+           data = iowa_data_reduced2)
+
+dfVifFit <- setDT(as.data.frame(car::vif(model3)), keep.rownames = TRUE)[]
+dfVifFit$Adjusted_GVIF <- (dfVifFit$`GVIF^(1/(2*Df))`^2)
+knitr::kable(dfVifFit, align = c("l", "c", "c", "c", "c"))
+```
+
+```{r}
+# Remove State Bottle Cost
+model3 <- lm(formula = log(`Bottles Sold`) ~ CategoryName + 
+             `State Bottle Retail` + `Volume Sold (Gallons)` + `Bottle Volume (ml)`, 
+           data = iowa_data_reduced2)
+
+stargazer(model3, header = FALSE, no.space = TRUE, style = "all2", font.size = "normalsize", single.row = TRUE, intercept.bottom = FALSE, title = "Forward Selection Linear Model for Log Bottles Sold with Influencial Points")
+```
+
+We select the values that have the greatest influence on our model and remove them to improve the model performance. The observations removed in this model is 4, 32, 79. By excluding these values from our evaluation data set we are able to fit a more appropriate model.
+
+```{r}
+#Removal of influence points based on two methods
+par(mfrow=c(1,2))
+#1. influence points
+influence <- influencePlot(model3)
+pandoc.table(influence, caption = "Influential points in Log of Bottles Sold Model from influencePlot function")
+#2. Cooks distance plot
+cook <- plot(model3,4)
+```
+
+```{r}
+#Remove the influential points and update the model
+model3 <- update(model3,data=iowa_data_reduced2[c(-4,-79),])
+summary(model3)
+par(mar = c(0, 0, 0, 0))
+par(mfrow=c(2,3))
+plot(model3)
+plot(model3$fitted.values,model3$model$ProfitDollar, xlab = "Actual Values", ylab = "Fitted Values" )
+abline(model3)
+stargazer(model3, header = FALSE, no.space = TRUE, style = "all2", font.size = "normalsize", single.row = TRUE, intercept.bottom = FALSE, title = "Forward Selection Linear Model for Log of Bottles Sold without Influencial Points")
+
+```
+
+
+we see a much more normal distribution of the residuals. 
+
+The residual distribution are more normal, it is almost remain unchange for log bottle sold when state bottle retail change.
+
+We would expect a negative correlation with bottles price and bottles sold. WHISKIES, DISTILLERY WHISKIES, and BOURBON WHISKIES were shown to be the most significant.
+
+It would suggest that larger bottles are correlated with better sales. The Adjusted R^2 was improved from 0.979 to 0.984 by removing the influence points. 
+
+## Selection Model
+Also, the AIC of this model is r round(AIC(model3),3) which is a much better AIC than r round(AIC(model1),3) and (AIC(modelTo compare all our regular models first, we build a dataframe which contains all the performance parameters of the models. Out of the four regular models, it is clear that the Log transformation with forward regression is the best model. It has the lowest AIC and BIC. 
+
+```{r}
+m1 <- broom:::glance(model1) 
+m2 <- broom:::glance(model2)
+m3 <- broom:::glance(model3)
+
+
+#Compare non-zero inflated models
+Models = c("Correlation", "Forward regression", "Log transformation")
+
+
+AIC = c(m1$AIC, m2$AIC, m3$AIC)
+BIC = c(m1$BIC, m2$BIC, m3$BIC)
+Deviance = c(m1$deviance, m2$deviance, m3$deviance)
+df.residual = c(m1$df.residual, m2$df.residual, m3$df.residual)
+
+any_but_zeroinflated <- data.frame(Models, AIC, BIC, Deviance, df.residual)
+knitr::kable(any_but_zeroinflated)
+
+```
+
+```{r}
+#iowa_data_reduced2$`Bottles Sold` <- raster::predict(model3, newdata = iowa_data_reduced2, type = "response")
+#head(iowa_data_reduced2, 20)
+```
+
+# Discussion and Conclusions
+
+The resulting models allow us to model in Des Moines for both Bottles Sold. We can utilize a naive forecast, assuming that the prior year of 2017 is predictive of the year 2018. However, there are further analysis types that may result in more robust predictions.
+
+The performance of the proposed method was evaluated using a real data set provided by Iowa Department of Commerce, Alcoholic Beverages Division. The results of the evaluation indicated that the proposed method can cope with the low number of past records while accurately forecasting sales. 
+
+An evaluation of the liquor data set using these techniques may provide greater insight as the vast number of records could produce a more accurate model.
+
+After exploratory analysis was done on the data, it was concluded that most liquor sold had different and specific characteristics and sales behavior, it was impractical to make a single prediction model for all medicines, and most sales records had nonlinear relationships per years. 
+
+
+# Appendices
+
+# AIC Value Comparison
+
+```{r}
+library(pander)
+
+x <- c(round(AIC(model1),3),round(AIC(model2),3), round(AIC(model3),3))
+y <- c("Correlation Bottles Sold","Bottles Sold", "Log Bottles Sold")
+z <- cbind(y,x)
+colnames(z) <- c("Model Name", "AIC")
+pandoc.table(z, caption = "AIC Values")
+
+```
+
+## Supplemental tables and figures
+
+```{r}
+library(psych)
+library(knitr)
+
+
+#iowa_data_reduced2 <- iowa_data_reduced2 %>% select(-X)
+describedData <- describe(iowa_data_reduced2)
+kable(describedData)
+```
+
+## Session Information
+```{r}
+toLatex(sessionInfo())
+```
+
+## R programming code
+
+See [Final Project.rmd](https://github.com/) on GitHub for source code.   
+
+
+
